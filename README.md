@@ -4,7 +4,7 @@ A two-stage system that predicts a resume's job category, then scores how well i
 
 ## 🚀 Live App
 
-[resume-screener-prediction.streamlit.app](https://resume-screener-prediction.streamlit.app/)
+https://resume-screener-validation-maryum.streamlit.app/
 
 ## Problem
 
