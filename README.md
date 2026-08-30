@@ -1,212 +1,62 @@
-# Resume Screener — SHAP Validation Dashboard
+# SHAP-Based Resume Screening Validation
 
-An explainable AI dashboard for auditing resume-to-job suitability predictions. This repository extends the Resume Screener model with **SHAP-based feature attribution**, allowing each prediction to be inspected rather than presented as an unexplained score.
+This project adds an explainability and validation layer to a resume screening system. It uses SHAP (SHapley Additive exPlanations) to show how different resume–job matching features influence the model’s suitability prediction.
 
-The application is implemented with Streamlit and is intended for model validation, prediction auditing, and demonstration of explainable machine learning techniques.
-
-## Live application
-
+## Live Application
 https://resume-screener-validation-maryum.streamlit.app/
 
-## What this project validates
 
-The dashboard evaluates an existing resume-screening pipeline at the level of individual predictions. Given a resume and a job description, it displays:
+## Why SHAP?
 
-1. A predicted resume category.
-2. The probability associated with the predicted category.
-3. A suitability score from 0 to 100.
-4. The skills shared by the resume and job description.
-5. The feature values used by the suitability model.
-6. SHAP feature impacts explaining why the suitability score increased or decreased.
+A machine-learning model may produce a suitability score, but the score alone does not explain the reason behind the prediction. SHAP helps make the model more transparent by showing the contribution of each feature to an individual prediction.
 
-> SHAP explanations provide local model explainability. They help audit individual predictions, but they do not replace test-set metrics such as accuracy, MAE, R², or a confusion matrix.
+SHAP is important because it helps to:
 
-## Why SHAP was added
+- Explain why a resume received a particular suitability score.
+- Identify the features that increased or decreased the prediction.
+- Check whether the model is relying on meaningful signals.
+- Detect unexpected or potentially misleading model behavior.
+- Improve trust and interpretability when reviewing predictions.
 
-A single suitability score does not show whether a model is relying on sensible evidence. The SHAP layer makes the prediction more transparent by decomposing the model output into feature-level contributions.
+## How SHAP is used
 
-For every analysis, the dashboard shows the features that influenced the prediction most strongly. Positive SHAP values pushed the prediction higher, while negative SHAP values pushed it lower. The dashboard also compares the raw prediction with the SHAP reconstruction to check that the explanation is consistent with the model output.
+For each resume and job-description pair, the system first calculates the features used by the suitability model. These include skill overlap, text similarity, semantic similarity, fuzzy matching, and text-length ratio.
 
-This makes the application useful as an **XAI auditor** rather than only as a resume-scoring interface.
+The trained model then generates a suitability prediction. SHAP analyzes that prediction and assigns an impact value to each feature:
 
-## Prediction pipeline
+- A positive SHAP value means the feature increased the predicted suitability score.
+- A negative SHAP value means the feature decreased the predicted suitability score.
+- A larger absolute SHAP value means the feature had a stronger influence on the prediction.
 
-The dashboard uses the following workflow:
+The system also compares the original model prediction with the score reconstructed from the SHAP values. This helps verify that the explanation is consistent with the model output.
 
-```text
-Resume text + job description
-              │
-              ▼
-     Feature construction
-              │
-              ├── Skill overlap
-              ├── Text similarity
-              ├── Skill-text similarity
-              ├── Embedding similarity
-              ├── Length ratio
-              ├── Fuzzy matching
-              └── Dataset-provided matching features
-              │
-              ▼
-     Suitability model prediction
-              │
-              ▼
-     SHAP TreeExplainer audit
-              │
-              ▼
-  Score, feature values, and explanations
-```
+## Features analyzed
 
-The category classifier runs separately and predicts the most likely resume category with a probability distribution.
-
-## Suitability features
-
-The suitability model uses eight features:
-
-| Feature | Meaning |
+| Feature | Purpose |
 |---|---|
-| `skill_overlap_ratio` | Proportion of required job skills found in the resume skill vocabulary. |
-| `skill_overlap_count` | Number of shared skills between the resume and job description. |
-| `length_ratio` | Relative length of the resume and job description text. |
-| `text_similarity` | TF-IDF cosine similarity between the complete resume and job text. |
-| `skill_text_similarity` | TF-IDF cosine similarity between the extracted skill text. |
-| `embedding_similarity` | Sentence-transformer semantic similarity between the resume and job text. |
-| `skill_string_match_score` | Skill matching score included in the training data. |
-| `fuzzy_match_score` | Fuzzy text matching score included in the training data. |
+| `skill_overlap_ratio` | Measures the proportion of job skills found in the resume. |
+| `skill_overlap_count` | Counts the shared skills between the resume and job description. |
+| `text_similarity` | Measures similarity between resume and job text using TF-IDF. |
+| `skill_text_similarity` | Measures similarity between the extracted skill text. |
+| `embedding_similarity` | Measures semantic similarity using sentence embeddings. |
+| `length_ratio` | Compares the relative lengths of the resume and job description. |
+| `skill_string_match_score` | Represents skill-based matching information from the data. |
+| `fuzzy_match_score` | Measures approximate text matching between the inputs. |
 
-The feature order is preserved in `services/feature_service.py` and passed to the saved suitability model and SHAP explainer.
+## Validation output
 
-## Model explainability output
+For each prediction, the system provides:
 
-The dashboard uses `shap.TreeExplainer` for the saved gradient-boosting suitability model. It presents:
+- The final suitability score.
+- The predicted resume category.
+- Matched skills between the resume and job description.
+- The values of the features used by the model.
+- The SHAP impact of each feature.
+- The direction and strength of each feature’s influence.
+- A comparison between the original prediction and the SHAP-reconstructed score.
 
-- A ranked feature-impact chart.
-- The numerical feature values used for the prediction.
-- The direction of each feature impact.
-- The SHAP base value.
-- The reconstructed score from the SHAP explanation.
-- The difference between the model score and reconstructed score.
+## Importance of the project
 
-This allows a reviewer to investigate questions such as:
+This project demonstrates how explainable AI can be applied to resume screening. Instead of treating the model as a black box, it provides evidence for how individual predictions are produced.
 
-- Did shared skills contribute positively to the score?
-- Did the text similarity feature dominate the prediction?
-- Which features reduced the predicted suitability?
-- Does the explanation reconstruct the model output correctly?
-
-## Repository structure
-
-```text
-.
-├── dashboard.py                    # SHAP validation and Streamlit interface
-├── app.py                          # Original Resume Screener Streamlit interface
-├── api.py                          # Optional FastAPI interface
-├── services/
-│   ├── feature_service.py          # Feature construction and skill matching
-│   └── model_service.py            # Model loading, prediction, and SHAP logic
-├── category_classifier.pkl         # Saved category classifier
-├── tfidf_vectorizer.pkl            # Category TF-IDF vectorizer
-├── suitability_model.pkl           # Saved suitability model
-├── suitability_vectorizer.pkl      # Suitability TF-IDF vectorizer
-├── skill_vectorizer.pkl            # Skill vocabulary vectorizer
-├── .streamlit/config.toml          # Streamlit theme and server settings
-├── requirements.txt                # Python dependencies
-└── runtime.txt                     # Python runtime version
-```
-
-## Installation
-
-Use Python 3.11 or a compatible Python environment.
-
-```bash
-git clone https://github.com/MaryumAkram16/Resume-Screener-validation.git
-cd Resume-Screener-validation
-python -m venv .venv
-```
-
-Activate the environment on Windows:
-
-```bat
-.venv\Scripts\activate
-```
-
-Activate it on macOS or Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Install the dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-The `requirements.txt` file must include the package used by the SHAP validation layer:
-
-```text
-streamlit==1.59.1
-scikit-learn==1.6.1
-joblib==1.5.3
-numpy==2.0.2
-pandas
-scipy
-sentence-transformers==5.6.0
-shap
-```
-
-## Run the dashboard locally
-
-Launch the SHAP dashboard with:
-
-```bash
-streamlit run dashboard.py
-```
-
-The first run may download the `all-MiniLM-L6-v2` sentence-transformer model. The saved `.pkl` artifacts must remain in the repository root because the service modules load them using paths relative to the project directory.
-
-## Deploy with Streamlit Community Cloud
-
-1. Push the repository to GitHub.
-2. Open [Streamlit Community Cloud](https://share.streamlit.io/).
-3. Sign in with GitHub.
-4. Select **Create app**.
-5. Choose the repository `MaryumAkram16/Resume-Screener-validation`.
-6. Select the `main` branch.
-7. Set the main file path to `dashboard.py`.
-8. Deploy the application.
-
-GitHub Actions or GitHub Pages are not required to host the Streamlit process. Streamlit Community Cloud should read `requirements.txt` and run `dashboard.py` directly.
-
-## Relationship to the original Resume Screener
-
-The original screening application predicts resume categories and suitability scores. This repository focuses on the **validation and explainability layer** added around that prediction pipeline.
-
-The main distinction is:
-
-| Original application | This repository |
-|---|---|
-| Presents category and suitability predictions. | Audits predictions with feature-level explanations. |
-| Focuses on the screening workflow. | Focuses on model transparency and local validation. |
-| Displays the final score. | Displays the score, input features, SHAP impacts, and reconstruction details. |
-
-## Limitations
-
-SHAP explains the behavior of the saved model; it does not guarantee that the model is fair, accurate, or suitable for making employment decisions. The explanation is only as reliable as the features, training data, and model itself.
-
-The training data is limited in size and contains approximated or synthetic matching assumptions. The application should therefore be treated as a research and auditing tool, not as an automated hiring decision-maker. Human review remains necessary for any real recruitment process.
-
-The sentence-transformer model may increase startup time and memory usage during deployment. The `.pkl` files must also be generated with compatible versions of Python and scikit-learn.
-
-## Technologies
-
-- [Streamlit](https://streamlit.io/) — interactive dashboard
-- [SHAP](https://shap.readthedocs.io/) — model explainability
-- [scikit-learn](https://scikit-learn.org/) — TF-IDF, classification, regression, and similarity calculations
-- [sentence-transformers](https://www.sbert.net/) — semantic text embeddings
-- [joblib](https://joblib.readthedocs.io/) — persisted model and vectorizer loading
-- [pandas](https://pandas.pydata.org/) and [NumPy](https://numpy.org/) — data processing
-
-## Responsible use
-
-This project is intended for educational, research, and model-auditing purposes. It should not be used as the sole basis for accepting, rejecting, ranking, or making employment decisions about candidates.
+The SHAP analysis is intended to support model auditing and interpretation. It does not guarantee that the model is accurate or unbiased, and it should not be used as the sole basis for employment decisions.
