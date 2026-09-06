@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Resume Screener - XAI Auditor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    background: #0A0E1A;
+    color: #E8EAF0;
+    margin: 0;
+    padding: 24px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  p.subtitle {
+    color: #8891A8;
+    margin-top: 0;
+    margin-bottom: 20px;
+  }
+  .layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  table {
+    border-collapse: collapse;
+    width: 420px;
+    background: #131829;
+    border: 1px solid #262D45;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #262D45;
+    font-size: 0.9rem;
+  }
+  th {
+    background: #1A2036;
+    color: #8891A8;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+  }
+  tbody tr {
+    cursor: pointer;
+  }
+  tbody tr:hover {
+    background: #1A2036;
+  }
+  tbody tr.selected {
+    background: #262D45;
+  }
+  .panel {
+    flex: 1;
+    background: #131829;
+    border: 1px solid #262D45;
+    border-radius: 8px;
+    padding: 20px;
+    min-height: 400px;
+  }
+  .score-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+  }
+  .score-box {
+    background: #1A2036;
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .score-box .label {
+    font-size: 0.75rem;
+    color: #8891A8;
+    text-transform: uppercase;
+  }
+  .score-box .value {
+    font-size: 1.4rem;
+    font-weight: bold;
+  }
+  .skills {
+    margin-top: 8px;
+    margin-bottom: 20px;
+  }
+  .skill-badge {
+    display: inline-block;
+    background: rgba(45, 212, 191, 0.15);
+    border: 1px solid rgba(45, 212, 191, 0.4);
+    color: #2DD4BF;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 0.8rem;
+    margin: 2px 4px 2px 0;
+  }
+  #chartContainer {
+    height: 320px;
+  }
+  .placeholder {
+    color: #8891A8;
+  }
+  .error {
+    color: #F87171;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Resume Screener - XAI Auditor</h1>
+  <p class="subtitle">Click a record to see the suitability score and why the model gave it.</p>
+
+  <div class="layout">
+
+    <table>
+      <thead>
+        <tr><th>Label</th><th>Resume</th><th>Job</th></tr>
+      </thead>
+      <tbody id="recordTable"></tbody>
+    </table>
+
+    <div class="panel" id="resultPanel">
+      <p class="placeholder">Select a record from the table to run the analysis.</p>
+    </div>
+
+  </div>
+
+<script>
+  // Point this at wherever your FastAPI server is running.
+  const API_BASE = "http://127.0.0.1:8000";
+
+  const RECORDS = [
+    {
+      label: "Strong match",
+      resume: "Software engineer with experience in Python, SQL, machine learning, and backend application development. Worked on data pipelines and APIs.",
+      job: "We are seeking a backend engineer with Python, SQL, REST APIs, and machine learning experience."
+    },
+    {
+      label: "Partial match",
+      resume: "Data analyst experienced in Python, SQL, Excel, dashboards, and business reporting. Worked with data cleaning and visualization.",
+      job: "We need a machine learning engineer with Python, SQL, REST APIs, TensorFlow, model deployment, and cloud experience."
+    },
+    {
+      label: "Weak match",
+      resume: "Graphic designer experienced in Adobe Photoshop, Illustrator, branding, typography, visual design, and print materials.",
+      job: "We are seeking a backend software engineer with Python, SQL, REST APIs, databases, machine learning, and cloud deployment experience."
+    }
+  ];
+
+  const tableBody = document.getElementById("recordTable");
+  const resultPanel = document.getElementById("resultPanel");
+  let chartInstance = null;
+
+  function truncate(text, n) {
+    return text.length > n ? text.slice(0, n) + "..." : text;
+  }
+
+  RECORDS.forEach((record, index) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${record.label}</td>
+      <td>${truncate(record.resume, 40)}</td>
+      <td>${truncate(record.job, 40)}</td>
+    `;
+    row.addEventListener("click", () => selectRecord(index, row));
+    tableBody.appendChild(row);
+  });
+
+  function selectRecord(index, row) {
+    document.querySelectorAll("#recordTable tr").forEach(tr => tr.classList.remove("selected"));
+    row.classList.add("selected");
+    runAnalysis(RECORDS[index]);
+  }
+
+  async function runAnalysis(record) {
+    resultPanel.innerHTML = `<p class="placeholder">Scoring...</p>`;
+
+    try {
+      const response = await fetch(`${API_BASE}/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resume_text: record.resume,
+          job_text: record.job
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.detail ? JSON.stringify(errorBody.detail) : `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      renderResult(data);
+
+    } catch (err) {
+      resultPanel.innerHTML = `
+        <p class="error">Could not reach the API: ${err.message}</p>
+        <p class="placeholder">Make sure the FastAPI server is running at ${API_BASE}
+        (uvicorn api:app --host 127.0.0.1 --port 8000).</p>
+      `;
+    }
+  }
+
+  function renderResult(data) {
+    const skillBadges = data.matched_skills.length
+      ? data.matched_skills.map(s => `<span class="skill-badge">${s}</span>`).join("")
+      : `<span class="placeholder">No overlapping skills detected</span>`;
+
+    resultPanel.innerHTML = `
+      <div class="score-row">
+        <div class="score-box">
+          <div class="label">Category</div>
+          <div class="value">${data.category}</div>
+        </div>
+        <div class="score-box">
+          <div class="label">Suitability score</div>
+          <div class="value">${data.display_score.toFixed(1)} / 100</div>
+        </div>
+      </div>
+      <div class="skills">${skillBadges}</div>
+      <div id="chartContainer"><canvas id="impactChart"></canvas></div>
+    `;
+
+    drawChart(data.reasons);
+  }
+
+  function drawChart(reasons) {
+    const sorted = [...reasons].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+    const labels = sorted.map(r => r.feature);
+    const values = sorted.map(r => r.impact);
+    const colors = values.map(v => v >= 0 ? "#2DD4BF" : "#F87171");
+
+    const ctx = document.getElementById("impactChart").getContext("2d");
+    if (chartInstance) chartInstance.destroy();
+
+    chartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "SHAP impact",
+          data: values,
+          backgroundColor: colors
+        }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#8891A8" }, grid: { color: "#262D45" } },
+          y: { ticks: { color: "#E8EAF0" }, grid: { display: false } }
+        }
+      }
+    });
+  }
+</script>
+
+</body>
+</html>
