@@ -141,6 +141,28 @@
   .custom-input button:hover {
     background: #6D28D9;
   }
+  .feature-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+  }
+  .feature-table th, .feature-table td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #262D45;
+    font-size: 0.85rem;
+  }
+  .feature-table th {
+    color: #8891A8;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+  }
+  .direction-increases {
+    color: #2DD4BF;
+  }
+  .direction-decreases {
+    color: #F87171;
+  }
 </style>
 </head>
 <body>
@@ -277,9 +299,29 @@
       </div>
       <div class="skills">${skillBadges}</div>
       <div id="chartContainer"><canvas id="impactChart"></canvas></div>
+      <table class="feature-table">
+        <thead>
+          <tr><th>Feature</th><th>Value</th><th>Impact</th><th>Direction</th></tr>
+        </thead>
+        <tbody id="featureTableBody"></tbody>
+      </table>
     `;
 
     drawChart(data.reasons);
+    fillFeatureTable(data.reasons);
+  }
+
+  function fillFeatureTable(reasons) {
+    const sorted = [...reasons].sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+    const tbody = document.getElementById("featureTableBody");
+    tbody.innerHTML = sorted.map(r => `
+      <tr>
+        <td>${r.feature}</td>
+        <td>${r.value.toFixed(6)}</td>
+        <td>${r.impact >= 0 ? "+" : ""}${r.impact.toFixed(6)}</td>
+        <td class="direction-${r.direction}">${r.direction}</td>
+      </tr>
+    `).join("");
   }
 
   function drawChart(reasons) {
