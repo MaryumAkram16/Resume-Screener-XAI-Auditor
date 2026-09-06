@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 st.set_page_config(
     page_title="Resume Screener",
@@ -14,7 +15,7 @@ API_BASE = "https://resume-screener-validation-production.up.railway.app"
 def score_resume_against_job(resume_text, job_text):
     try:
         response = requests.post(
-            f"{API_BASE}/predict",
+            f"{API_BASE}/explain",
             json={"resume_text": resume_text, "job_text": job_text},
             timeout=90,
         )
@@ -39,6 +40,7 @@ def score_resume_against_job(resume_text, job_text):
         "order": order,
         "suitability_score": data["display_score"],
         "matched_skills": data["matched_skills"],
+        "reasons": data["reasons"],
     }
 
 
@@ -255,6 +257,21 @@ if page == "🔍  Try It":
                 st.markdown(f'<div class="card">{skill_badges}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="card">No overlapping skills detected between the resume and job description.</div>', unsafe_allow_html=True)
+
+            st.markdown("#### Why this score?")
+            st.caption("Positive values pushed the model score higher. Negative values pushed it lower.")
+
+            reasons = pd.DataFrame(result["reasons"])
+            reasons["absolute_impact"] = reasons["impact"].abs()
+            reasons = reasons.sort_values("absolute_impact", ascending=False)
+
+            chart_data = reasons.set_index("feature")["impact"]
+            st.bar_chart(chart_data, horizontal=True)
+
+            display_reasons = reasons[["feature", "value", "impact", "direction"]].copy()
+            display_reasons["value"] = display_reasons["value"].map(lambda v: f"{v:.6f}")
+            display_reasons["impact"] = display_reasons["impact"].map(lambda v: f"{v:+.6f}")
+            st.dataframe(display_reasons, use_container_width=True, hide_index=True)
 
             st.caption(
                 "Suitability score is a trained model estimate, not a hiring decision. "
