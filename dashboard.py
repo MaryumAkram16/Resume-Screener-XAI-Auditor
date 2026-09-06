@@ -1,13 +1,6 @@
-import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
-
-from services.feature_service import FEATURE_COLS, build_features
-from services.model_service import (
-    explain_suitability,
-    predict_category,
-    predict_suitability,
-)
 
 
 st.set_page_config(
@@ -15,6 +8,8 @@ st.set_page_config(
     page_icon="📄",
     layout="wide",
 )
+
+API_BASE = "https://resume-screener-validation-production.up.railway.app"
 
 
 STRONG_RESUME = """Software engineer with experience in Python, SQL, machine learning,
@@ -62,20 +57,20 @@ if analyze:
         st.error("Both resume text and job description are required.")
         st.stop()
 
-    with st.spinner("Calculating prediction and SHAP explanation..."):
+    with st.spinner("Calculating prediction and SHAP explanation... (may take a moment if the API is waking up)"):
         try:
-            features_df, matched_skills = build_features(
-                resume_text.strip(),
-                job_text.strip(),
+            response = requests.post(
+                f"{API_BASE}/explain",
+                json={"resume_text": resume_text.strip(), "job_text": job_text.strip()},
+                timeout=90,
             )
-            category, probabilities = predict_category(resume_text.strip())
-            raw_score, display_score = predict_suitability(features_df)
-            shap_result = explain_suitability(features_df, FEATURE_COLS)
-        except Exception as error:
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.RequestException as error:
             st.error(f"The screening pipeline failed: {error}")
             st.stop()
 
-    reasons = pd.DataFrame(shap_result["reasons"])
+    reasons = pd.DataFrame(data["reasons"])
     reasons["absolute_impact"] = reasons["impact"].abs()
     reasons = reasons.sort_values("absolute_impact", ascending=False)
 
@@ -83,13 +78,13 @@ if analyze:
 
     score_col, category_col, match_col = st.columns(3)
     with score_col:
-        st.metric("Suitability score", f"{display_score:.2f} / 100")
+        st.metric("Suitability score", f"{data['display_score']:.2f} / 100")
     with category_col:
-        st.metric("Predicted category", category)
-        st.caption(f"Category probability: {max(probabilities):.2%}")
+        st.metric("Predicted category", data["category"])
+        st.caption(f"Category probability: {data['category_probability']:.2%}")
     with match_col:
-        st.metric("Matched skills", len(matched_skills))
-        st.caption(", ".join(matched_skills) if matched_skills else "No shared vocabulary skills")
+        st.metric("Matched skills", len(data["matched_skills"]))
+        st.caption(", ".join(data["matched_skills"]) if data["matched_skills"] else "No shared vocabulary skills")
 
     st.divider()
 
@@ -115,7 +110,7 @@ if analyze:
 
     with tab_features:
         st.subheader("Validated model features")
-        st.dataframe(features_df, use_container_width=True, hide_index=True)
+        st.dataframe(reasons[["feature", "value"]], use_container_width=True, hide_index=True)
         st.caption("The feature order is preserved exactly as expected by the saved suitability model.")
 
     with tab_details:
@@ -130,20 +125,20 @@ if analyze:
                     "Reconstruction difference",
                 ],
                 "value": [
-                    raw_score,
-                    display_score,
-                    shap_result["base_value"],
-                    shap_result["reconstructed_score"],
-                    abs(raw_score - shap_result["reconstructed_score"]),
+                    data["raw_score"],
+                    data["display_score"],
+                    data["base_value"],
+                    data["reconstructed_score"],
+                    abs(data["raw_score"] - data["reconstructed_score"]),
                 ],
             }
         )
         st.dataframe(details, use_container_width=True, hide_index=True)
         st.json(
             {
-                "category": category,
-                "matched_skills": matched_skills,
-                "feature_columns": FEATURE_COLS,
+                "category": data["category"],
+                "matched_skills": data["matched_skills"],
+                "feature_columns": list(reasons["feature"]),
             }
         )
 else:
