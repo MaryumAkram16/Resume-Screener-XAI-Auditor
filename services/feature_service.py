@@ -20,6 +20,64 @@ FEATURE_COLS = [
 ]
 
 
+NON_SKILL_DISPLAY_TERMS = {
+    "experience", "experiences", "experiential", "ability", "abilities",
+    "background", "level", "levels", "industry", "position", "positions",
+    "role", "roles", "responsibility", "responsibilities", "task", "tasks",
+    "duty", "duties", "requirement", "requirements", "opportunity",
+    "opportunities", "knowledge", "understanding", "skill", "skills", "area",
+    "areas", "field", "aspect", "aspects", "quality", "qualities",
+    "environment", "environments", "team", "teams", "department",
+    "departmental", "organization", "company", "companies", "business",
+    "customer", "customers", "client", "clients", "service", "services",
+    "professional", "professionalism", "career", "job", "jobs", "work",
+    "works", "working", "worker", "workers", "workplace", "staff",
+    "personnel", "member", "membership", "person", "people", "individual",
+    "employee", "employment",
+    "managing", "management", "provide", "providing", "ensure", "ensuring",
+    "maintain", "maintains", "maintaining", "support", "supporting",
+    "follow", "following", "handle", "handling", "meet", "meeting",
+    "meetings", "engage", "engaging", "execute", "execution", "performing",
+    "performance", "perform", "delivering", "delivery", "achieving",
+    "achievement", "demonstrate", "demonstrating", "demonstration",
+    "understand", "understood", "apply", "applying", "application",
+    "applications", "use", "using", "utilize", "utilizing", "utilization",
+    "excellent", "exceptional", "strong", "effective", "dedicated",
+    "motivated", "driven", "passionate", "enthusiastic", "enthusiasm",
+    "reliable", "dependable", "dependability", "punctual", "punctuality",
+    "honest", "honesty", "friendly", "friendliness", "cheerful",
+    "cheerfulness", "courteous", "courtesy", "respectful", "respect",
+    "ambitious", "ambition", "confident", "confidence", "adaptable",
+    "adaptability", "flexible", "flexibility", "organized", "organizing",
+    "organization", "independent", "independently", "proactive",
+    "proactivity", "positive", "positivity", "energetic", "energy",
+    "detailed", "detail", "details", "attentive", "attentiveness",
+    "attention", "careful", "diligent", "diligence", "committed",
+    "commitment", "hardworking", "creative", "creativity", "innovative",
+    "innovation", "collaborative", "collaboration", "communicator",
+    "communication", "communications", "interpersonal", "leadership",
+    "leader", "teamwork", "multitasking",
+    "daily", "weekly", "monthly", "annual", "annually", "year", "years",
+    "hour", "hours", "month", "months", "day", "days", "time", "times",
+    "general", "various", "multiple", "high", "highly", "new", "good",
+    "great", "large", "small", "key", "major", "primary", "secondary",
+    "overall", "advanced", "basic", "basics", "fundamentals",
+    "fundamental",
+    "engineer", "engineers", "developer", "developers", "manager",
+    "managers", "analyst", "analysts", "specialist", "specialists",
+    "coordinator", "coordinators", "associate", "associates", "assistant",
+    "assistants", "director", "directors", "administrator",
+    "administrators", "technician", "technicians", "consultant",
+    "consultants", "officer", "officers", "representative",
+    "representatives", "supervisor", "supervisors", "executive",
+    "executives", "lead", "leads", "senior", "junior", "intern",
+}
+
+
+def filter_display_skills(skills):
+    return [skill for skill in skills if skill not in NON_SKILL_DISPLAY_TERMS]
+
+
 skill_vocabulary = skill_vectorizer.get_feature_names_out()
 embed_model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -110,4 +168,6 @@ def build_features(resume_text, job_text):
         columns=FEATURE_COLS,
     )
 
-    return features_df, matched_skills
+    display_matched_skills = filter_display_skills(matched_skills)
+
+    return features_df, display_matched_skills
