@@ -39,6 +39,9 @@ def score_resume_against_job(resume_text, job_text):
         "classes": classes,
         "order": order,
         "suitability_score": data["display_score"],
+        "raw_score": data["raw_score"],
+        "base_value": data["base_value"],
+        "reconstructed_score": data["reconstructed_score"],
         "matched_skills": data["matched_skills"],
         "reasons": data["reasons"],
     }
@@ -166,241 +169,143 @@ hr { border-color: var(--border) !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ============ SIDEBAR NAVIGATION ============
+# ============ SIDEBAR ============
 with st.sidebar:
     st.markdown("## 🧾 Resume AI")
     st.caption("Category + suitability screening")
     st.markdown("---")
-    page = st.radio(
-        "Navigate",
-        ["🔍  Try It", "📊  Model Performance", "🧠  Model & Method"],
-        label_visibility="collapsed"
-    )
-    st.markdown("---")
     st.caption("Student project · Resume + job-posting datasets\nNot an official hiring tool")
 
 # ============ TRY IT ============
-if page == "🔍  Try It":
-    st.markdown('<div class="eyebrow">● TWO-STAGE PIPELINE: CATEGORY + SUITABILITY</div>', unsafe_allow_html=True)
-    st.markdown("""
-    <div class="hero">
-        <h1>Paste a resume and a job.<br>See where it lands.</h1>
-        <p>Stage 1 predicts the resume's job category. Stage 2 scores how well it
-        actually fits the specific job description you paste in, using a model
-        trained on real resume-job match data.</p>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown('<div class="eyebrow">● TWO-STAGE PIPELINE: CATEGORY + SUITABILITY</div>', unsafe_allow_html=True)
+st.markdown("""
+<div class="hero">
+    <h1>Paste a resume and a job.<br>See where it lands.</h1>
+    <p>Stage 1 predicts the resume's job category. Stage 2 scores how well it
+    actually fits the specific job description you paste in, using a model
+    trained on real resume-job match data.</p>
+</div>
+""", unsafe_allow_html=True)
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        resume_text = st.text_area(
-            "Resume text", height=220,
-            placeholder="Paste the resume text here..."
-        )
-    with col2:
-        job_text = st.text_area(
-            "Job description", height=220,
-            placeholder="Paste the job description here..."
-        )
-    predict_clicked = st.button("🔎  Score This Resume", type="primary")
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('<div class="card">', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+with col1:
+    resume_text = st.text_area(
+        "Resume text", height=220,
+        placeholder="Paste the resume text here..."
+    )
+with col2:
+    job_text = st.text_area(
+        "Job description", height=220,
+        placeholder="Paste the job description here..."
+    )
+predict_clicked = st.button("🔎  Score This Resume", type="primary")
+st.markdown('</div>', unsafe_allow_html=True)
 
-    if predict_clicked:
-        if resume_text.strip() == "" or job_text.strip() == "":
-            st.warning("Paste both a resume and a job description first.")
+if predict_clicked:
+    if resume_text.strip() == "" or job_text.strip() == "":
+        st.warning("Paste both a resume and a job description first.")
+    else:
+        with st.spinner("Scoring... (may take a moment if the API is waking up)"):
+            result = score_resume_against_job(resume_text, job_text)
+
+        r1, r2 = st.columns(2)
+        with r1:
+            st.markdown(f"""
+            <div class="result-card">
+                <div class="result-label">Predicted Category</div>
+                <div class="result-value">{result['category']}</div>
+                <span class="badge badge-purple">Stage 1 · Logistic Regression</span>
+            </div>
+            """, unsafe_allow_html=True)
+        with r2:
+            score = result["suitability_score"]
+            badge_class = "badge-teal" if score >= 60 else "badge-warn"
+            fit_label = "Strong fit" if score >= 60 else ("Moderate fit" if score >= 30 else "Weak fit")
+            st.markdown(f"""
+            <div class="result-card">
+                <div class="result-label">Suitability Score</div>
+                <div class="result-value">{score:.1f} / 100</div>
+                <span class="badge {badge_class}">{fit_label}</span>
+                <span class="badge badge-purple">Stage 2 · Gradient Boosting</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("#### Category confidence breakdown")
+        classes, order, proba = result["classes"], result["order"], result["category_confidence"]
+        bars_html = '<div class="card">'
+        for i in order[:5]:
+            pct = proba[i] * 100
+            bars_html += (
+                '<div class="conf-row">'
+                f'<div class="conf-label"><span>{classes[i]}</span><span>{pct:.1f}%</span></div>'
+                f'<div class="conf-track"><div class="conf-fill" style="width:{pct}%;"></div></div>'
+                '</div>'
+            )
+        bars_html += '</div>'
+        st.markdown(bars_html, unsafe_allow_html=True)
+
+        st.markdown("#### Matched skills")
+        if result["matched_skills"]:
+            skill_badges = "".join(
+                f'<span class="badge badge-teal">{s}</span>' for s in result["matched_skills"]
+            )
+            st.markdown(f'<div class="card">{skill_badges}</div>', unsafe_allow_html=True)
         else:
-            with st.spinner("Scoring... (may take a moment if the API is waking up)"):
-                result = score_resume_against_job(resume_text, job_text)
+            st.markdown('<div class="card">No overlapping skills detected between the resume and job description.</div>', unsafe_allow_html=True)
 
-            r1, r2 = st.columns(2)
-            with r1:
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="result-label">Predicted Category</div>
-                    <div class="result-value">{result['category']}</div>
-                    <span class="badge badge-purple">Stage 1 · Logistic Regression</span>
-                </div>
-                """, unsafe_allow_html=True)
-            with r2:
-                score = result["suitability_score"]
-                badge_class = "badge-teal" if score >= 60 else "badge-warn"
-                fit_label = "Strong fit" if score >= 60 else ("Moderate fit" if score >= 30 else "Weak fit")
-                st.markdown(f"""
-                <div class="result-card">
-                    <div class="result-label">Suitability Score</div>
-                    <div class="result-value">{score:.1f} / 100</div>
-                    <span class="badge {badge_class}">{fit_label}</span>
-                    <span class="badge badge-purple">Stage 2 · Gradient Boosting</span>
-                </div>
-                """, unsafe_allow_html=True)
+        reasons = pd.DataFrame(result["reasons"])
+        reasons["absolute_impact"] = reasons["impact"].abs()
+        reasons_sorted = reasons.sort_values("absolute_impact", ascending=False)
 
-            st.markdown("#### Category confidence breakdown")
-            classes, order, proba = result["classes"], result["order"], result["category_confidence"]
-            bars_html = '<div class="card">'
-            for i in order[:5]:
-                pct = proba[i] * 100
-                bars_html += (
-                    '<div class="conf-row">'
-                    f'<div class="conf-label"><span>{classes[i]}</span><span>{pct:.1f}%</span></div>'
-                    f'<div class="conf-track"><div class="conf-fill" style="width:{pct}%;"></div></div>'
-                    '</div>'
-                )
-            bars_html += '</div>'
-            st.markdown(bars_html, unsafe_allow_html=True)
+        tab_explanation, tab_features, tab_details = st.tabs(
+            ["Why this score?", "Feature values", "Technical details"]
+        )
 
-            st.markdown("#### Matched skills")
-            if result["matched_skills"]:
-                skill_badges = "".join(
-                    f'<span class="badge badge-teal">{s}</span>' for s in result["matched_skills"]
-                )
-                st.markdown(f'<div class="card">{skill_badges}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="card">No overlapping skills detected between the resume and job description.</div>', unsafe_allow_html=True)
-
-            st.markdown("#### Why this score?")
-            st.caption("Positive values pushed the model score higher. Negative values pushed it lower.")
-
-            reasons = pd.DataFrame(result["reasons"])
-            reasons["absolute_impact"] = reasons["impact"].abs()
-            reasons = reasons.sort_values("absolute_impact", ascending=False)
-
-            chart_data = reasons.set_index("feature")["impact"]
+        with tab_explanation:
+            st.write(
+                "Positive values pushed the model score higher. Negative values pushed it lower."
+            )
+            chart_data = reasons_sorted.set_index("feature")["impact"]
             st.bar_chart(chart_data, horizontal=True)
 
-            display_reasons = reasons[["feature", "value", "impact", "direction"]].copy()
+            display_reasons = reasons_sorted[["feature", "value", "impact", "direction"]].copy()
             display_reasons["value"] = display_reasons["value"].map(lambda v: f"{v:.6f}")
             display_reasons["impact"] = display_reasons["impact"].map(lambda v: f"{v:+.6f}")
             st.dataframe(display_reasons, use_container_width=True, hide_index=True)
 
-            st.caption(
-                "Suitability score is a trained model estimate, not a hiring decision. "
-                "Two of its inputs (skill_string_match_score, fuzzy_match_score) are this app's "
-                "own approximations - see Model & Method for details."
-            )
+        with tab_features:
+            st.subheader("Validated model features")
+            st.dataframe(reasons[["feature", "value"]], use_container_width=True, hide_index=True)
+            st.caption("The feature order is preserved exactly as expected by the saved suitability model.")
 
-# ============ MODEL PERFORMANCE ============
-elif page == "📊  Model Performance":
-    st.markdown('<div class="eyebrow">● EVALUATED ON HELD-OUT TEST DATA</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero"><h1>Test set performance</h1></div>', unsafe_allow_html=True)
+        with tab_details:
+            st.subheader("Prediction details")
+            details = pd.DataFrame({
+                "item": [
+                    "Raw suitability score",
+                    "Display suitability score",
+                    "SHAP base value",
+                    "Reconstructed score",
+                    "Reconstruction difference",
+                ],
+                "value": [
+                    result["raw_score"],
+                    result["suitability_score"],
+                    result["base_value"],
+                    result["reconstructed_score"],
+                    abs(result["raw_score"] - result["reconstructed_score"]),
+                ],
+            })
+            st.dataframe(details, use_container_width=True, hide_index=True)
+            st.json({
+                "category": result["category"],
+                "matched_skills": result["matched_skills"],
+                "feature_columns": list(reasons["feature"]),
+            })
 
-    st.markdown("### Stage 1 - Category Classifier")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("Accuracy", "68.0%")
-    with m2:
-        st.metric("Categories", "24 → 20")
-    with m3:
-        st.metric("Model", "Logistic Regression")
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("#### Confusion matrix")
-    st.image("chart_confusion_matrix.png", use_container_width=True)
-    st.caption(
-        "Most confusion happens between categories with genuine language overlap - "
-        "e.g. Consultant, Business-Development, and Sales resumes were merged into one "
-        "Business category during cleanup for exactly this reason."
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("### Stage 2 - Suitability Scoring")
-    m4, m5, m6 = st.columns(3)
-    with m4:
-        st.metric("MAE", "8.69")
-    with m5:
-        st.metric("R²", "0.814")
-    with m6:
-        st.metric("Model", "Gradient Boosting")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### Predicted vs actual")
-        st.image("chart_predicted_vs_actual.png", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-    with c2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### Feature importance")
-        st.image("chart_feature_importance.png", use_container_width=True)
-        st.caption("Plain TF-IDF text similarity ended up the strongest signal - sentence embeddings added only marginal value on top of it.")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# ============ MODEL & METHOD ============
-else:
-    st.markdown('<div class="eyebrow">● HOW IT WORKS</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero"><h1>Project overview</h1><p>A two-stage system: first predict what kind of resume this is, then score how well it fits a specific job description - built on a resume dataset too small to train reliably without deliberate handling of class imbalance and missing negative examples.</p></div>', unsafe_allow_html=True)
-
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("Resumes", "2,484")
-    with m2:
-        st.metric("Categories", "24 → 20")
-    with m3:
-        st.metric("Stage 1 accuracy", "68.0%")
-    with m4:
-        st.metric("Stage 2 R²", "0.814")
-
-    st.markdown("### The pipeline")
-    p1, p2, p3, p4, p5 = st.columns(5)
-    steps = [
-        ("1. EDA & Clean", "Dropped duplicate/near-empty resumes, stripped stray HTML tags and whitespace from scraped text."),
-        ("2. Merge categories", "Consultant, Business-Development, and Sales merged into one Business bucket - the language between them genuinely overlaps."),
-        ("3. Stage 1 train", "TF-IDF (unigrams+bigrams) + Logistic Regression, class_weight='balanced' so small categories aren't ignored."),
-        ("4. Stage 2 features", "8 features per resume-job pair: skill overlap, length ratio, TF-IDF similarity, skill-text similarity, sentence embeddings, plus two dataset-provided match scores."),
-        ("5. Stage 2 train", "Synthetic negative pairs (wrong-category job matches) added so the model learns what a bad fit looks like, not just gradations of good ones."),
-    ]
-    for col, (title, desc) in zip([p1, p2, p3, p4, p5], steps):
-        with col:
-            st.markdown(f'<div class="card"><b>{title}</b><br><span style="color:#8891A8;font-size:0.85rem;">{desc}</span></div>', unsafe_allow_html=True)
-
-    st.markdown("### Key engineering decisions")
-    d1, d2 = st.columns(2)
-    with d1:
-        st.markdown("""
-        <div class="card">
-        <b>Why merge categories</b><br><br>
-        The raw dataset has 24 categories, some with under 40 samples. Consultant,
-        Business-Development, and Sales were constantly confused with each other in
-        the confusion matrix - merging them and dropping the smallest classes
-        (Automobile, BPO) lifted accuracy from 66% to 68% and made the remaining
-        errors more meaningful to analyze.
-        </div>
-        <div class="card">
-        <b>Why synthetic negative pairs</b><br><br>
-        The suitability training data only pairs resumes with jobs they were
-        actually matched against - every example is some flavor of "decent fit."
-        Pairing some resumes with a random wrong-category job and labeling it with
-        a low score gave the model real contrast to learn from, which measurably
-        fixed the worst-performing categories (HR error dropped from 20.7 to ~11.5).
-        </div>
-        """, unsafe_allow_html=True)
-    with d2:
-        st.markdown("""
-        <div class="card">
-        <b>Why Gradient Boosting over Random Forest</b><br><br>
-        Both were tried alongside a tuned Random Forest (GridSearchCV). Gradient
-        Boosting won on every metric (MAE 8.69 vs 8.98-9.04), so it became the
-        final Stage 2 model.
-        </div>
-        <div class="card">
-        <b>What didn't work as expected</b><br><br>
-        Sentence embeddings were added expecting a meaningful semantic-similarity
-        boost over plain TF-IDF. In practice, embedding_similarity contributed only
-        ~6% feature importance vs ~47% for plain text_similarity - resume-job fit in
-        this data is driven more by shared vocabulary than by paraphrased meaning.
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("### Honest limitations")
-    l1, l2, l3 = st.columns(3)
-    limitations = [
-        ("Approximated match scores", "skill_string_match_score and fuzzy_match_score in Stage 2 training came from the original dataset author's private RecAI pipeline. This app's live scoring uses honest, simpler stand-ins (word-boundary matching, difflib) - not the exact original formula."),
-        ("Small training set", "2,484 resumes across 20+ categories means some categories (Agriculture, Apparel) only have a few dozen examples - Stage 1's 68% accuracy reflects a genuinely hard, data-limited problem, not a modeling mistake."),
-        ("Category errors propagate", "If Stage 1 misclassifies a resume's category, that error can carry into how Stage 2's features are interpreted, even though Stage 2 doesn't take Stage 1's prediction as a direct input."),
-    ]
-    for col, (title, desc) in zip([l1, l2, l3], limitations):
-        with col:
-            st.markdown(f'<div class="card"><span class="badge badge-warn">{title}</span><br><br><span style="color:#8891A8;font-size:0.9rem;">{desc}</span></div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.caption("Stage 1: scikit-learn LogisticRegression · Stage 2: GradientBoostingRegressor · random_state=42 · trained on Google Colab (free tier)")
+        st.caption(
+            "Suitability score is a trained model estimate, not a hiring decision. "
+            "Two of its inputs (skill_string_match_score, fuzzy_match_score) are this app's "
+            "own approximations."
+        )
