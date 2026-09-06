@@ -1,13 +1,5 @@
 import streamlit as st
-import joblib
-import numpy as np
-import pandas as pd
-import re
-from difflib import SequenceMatcher
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
-
-from services.feature_service import filter_display_skills
+import requests
 
 st.set_page_config(
     page_title="Resume Screener",
@@ -16,106 +8,37 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-FEATURE_COLS = [
-    "skill_overlap_ratio", "skill_overlap_count", "length_ratio",
-    "text_similarity", "skill_text_similarity", "embedding_similarity",
-    "skill_string_match_score", "fuzzy_match_score",
-]
-
-
-@st.cache_resource
-def load_models():
-    clf = joblib.load("category_classifier.pkl")
-    vectorizer = joblib.load("tfidf_vectorizer.pkl")
-    suitability_model = joblib.load("suitability_model.pkl")
-    vectorizer_s2 = joblib.load("suitability_vectorizer.pkl")
-    skill_vectorizer = joblib.load("skill_vectorizer.pkl")
-    embed_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return clf, vectorizer, suitability_model, vectorizer_s2, skill_vectorizer, embed_model
-
-
-clf, vectorizer, suitability_model, vectorizer_s2, skill_vectorizer, embed_model = load_models()
-SKILL_VOCAB = skill_vectorizer.get_feature_names_out()
-
-
-def extract_skills(text, vocab=SKILL_VOCAB):
-    """Word-boundary matching against the skill vocabulary the skill_vectorizer
-    was fit on during training - not a fancy NER model, just honest keyword
-    matching against real skills seen in the training data."""
-    text_lower = text.lower()
-    return [skill for skill in vocab if re.search(r"\b" + re.escape(skill) + r"\b", text_lower)]
-
-
-def skill_string_match_stub(resume_text, job_skills):
-    """Stand-in for skill_string_match_score - the original dataset's version
-    came from the author's own RecAI pipeline, which isn't public. This is a
-    simple honest substitute: % of the job's required skills found verbatim
-    (whole word/phrase) in the resume text."""
-    if not job_skills:
-        return 0.0
-    text_lower = resume_text.lower()
-    matches = sum(1 for s in job_skills if re.search(r"\b" + re.escape(s) + r"\b", text_lower))
-    return 100 * matches / len(job_skills)
-
-
-def fuzzy_match_stub(resume_skills, job_skills):
-    """Stand-in for fuzzy_match_score - uses difflib's sequence matcher on the
-    joined skill strings instead of the original's fuzzy-token method."""
-    resume_str = " ".join(resume_skills)
-    job_str = " ".join(job_skills)
-    if not resume_str or not job_str:
-        return 0.0
-    return SequenceMatcher(None, resume_str, job_str).ratio() * 100
+API_BASE = "https://resume-screener-validation-production.up.railway.app"
 
 
 def score_resume_against_job(resume_text, job_text):
-    proba = clf.predict_proba(vectorizer.transform([resume_text]))[0]
-    classes = clf.classes_
-    order = np.argsort(proba)[::-1]
-    category = classes[order[0]]
+    try:
+        response = requests.post(
+            f"{API_BASE}/predict",
+            json={"resume_text": resume_text, "job_text": job_text},
+            timeout=90,
+        )
+    except requests.exceptions.RequestException as error:
+        st.error(f"Could not reach the scoring API: {error}")
+        st.stop()
 
-    resume_skills = extract_skills(resume_text)
-    job_skills = extract_skills(job_text)
-    resume_set, job_set = set(resume_skills), set(job_skills)
+    if response.status_code != 200:
+        st.error(f"Scoring API returned an error: {response.text}")
+        st.stop()
 
-    skill_overlap_ratio_val = len(resume_set & job_set) / len(job_set) if job_set else 0.0
-    skill_overlap_count_val = len(resume_set & job_set)
+    data = response.json()
 
-    resume_word_count = len(resume_text.split())
-    job_word_count = len(job_text.split())
-    length_ratio_val = min(resume_word_count, job_word_count) / max(resume_word_count, job_word_count, 1)
-
-    text_sim = cosine_similarity(
-        vectorizer_s2.transform([resume_text]), vectorizer_s2.transform([job_text])
-    )[0][0]
-
-    skill_text_sim = cosine_similarity(
-        skill_vectorizer.transform([" ".join(resume_skills)]),
-        skill_vectorizer.transform([" ".join(job_skills)])
-    )[0][0]
-
-    resume_emb = embed_model.encode([resume_text])
-    job_emb = embed_model.encode([job_text])
-    embedding_sim = cosine_similarity(resume_emb, job_emb)[0][0]
-
-    skill_string_score = skill_string_match_stub(resume_text, job_skills)
-    fuzzy_score = fuzzy_match_stub(resume_skills, job_skills)
-
-    features_df = pd.DataFrame([[
-        skill_overlap_ratio_val, skill_overlap_count_val, length_ratio_val,
-        text_sim, skill_text_sim, embedding_sim,
-        skill_string_score, fuzzy_score
-    ]], columns=FEATURE_COLS)
-
-    suitability = suitability_model.predict(features_df)[0]
+    classes = list(data["category_probabilities"].keys())
+    proba = list(data["category_probabilities"].values())
+    order = sorted(range(len(proba)), key=lambda i: proba[i], reverse=True)
 
     return {
-        "category": category,
+        "category": data["category"],
         "category_confidence": proba,
         "classes": classes,
         "order": order,
-        "suitability_score": float(np.clip(suitability, 0, 100)),
-        "matched_skills": filter_display_skills(sorted(resume_set & job_set)),
+        "suitability_score": data["display_score"],
+        "matched_skills": data["matched_skills"],
     }
 
 
@@ -285,7 +208,7 @@ if page == "🔍  Try It":
         if resume_text.strip() == "" or job_text.strip() == "":
             st.warning("Paste both a resume and a job description first.")
         else:
-            with st.spinner("Scoring..."):
+            with st.spinner("Scoring... (may take a moment if the API is waking up)"):
                 result = score_resume_against_job(resume_text, job_text)
 
             r1, r2 = st.columns(2)
