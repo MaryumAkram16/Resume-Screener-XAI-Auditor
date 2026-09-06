@@ -7,6 +7,8 @@ from difflib import SequenceMatcher
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
 
+from services.feature_service import filter_display_skills
+
 st.set_page_config(
     page_title="Resume Screener",
     page_icon="🧾",
@@ -113,7 +115,7 @@ def score_resume_against_job(resume_text, job_text):
         "classes": classes,
         "order": order,
         "suitability_score": float(np.clip(suitability, 0, 100)),
-        "matched_skills": sorted(resume_set & job_set),
+        "matched_skills": filter_display_skills(sorted(resume_set & job_set)),
     }
 
 
