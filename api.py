@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from services.feature_service import FEATURE_COLS, build_features
 from services.model_service import (
+    category_model,
     explain_suitability,
     predict_category,
     predict_suitability,
@@ -39,6 +40,7 @@ class ScreeningRequest(BaseModel):
 class PredictionResponse(BaseModel):
     category: str
     category_probability: float
+    category_probabilities: dict[str, float]
     raw_score: float
     display_score: float
     matched_skills: list[str]
@@ -76,12 +78,17 @@ def run_screening(request: ScreeningRequest):
         category, probabilities = predict_category(request.resume_text)
         raw_score, display_score = predict_suitability(features_df)
         category_probability = float(max(probabilities))
+        category_probabilities = {
+            str(class_name): float(prob)
+            for class_name, prob in zip(category_model.classes_, probabilities)
+        }
 
         return {
             "features_df": features_df,
             "matched_skills": matched_skills,
             "category": category,
             "category_probability": category_probability,
+            "category_probabilities": category_probabilities,
             "raw_score": raw_score,
             "display_score": display_score,
         }
@@ -107,6 +114,7 @@ def predict(request: ScreeningRequest):
     return PredictionResponse(
         category=result["category"],
         category_probability=result["category_probability"],
+        category_probabilities=result["category_probabilities"],
         raw_score=result["raw_score"],
         display_score=result["display_score"],
         matched_skills=result["matched_skills"],
@@ -129,6 +137,7 @@ def explain(request: ScreeningRequest):
     return ExplanationResponse(
         category=result["category"],
         category_probability=result["category_probability"],
+        category_probabilities=result["category_probabilities"],
         raw_score=result["raw_score"],
         display_score=result["display_score"],
         matched_skills=result["matched_skills"],
