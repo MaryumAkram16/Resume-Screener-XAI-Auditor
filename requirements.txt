@@ -6,4 +6,5 @@ pandas
 scipy
 sentence-transformers==5.6.0
 shap
-
+fastapi
+uvicorn[standard]
