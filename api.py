@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from services.feature_service import FEATURE_COLS, build_features
@@ -13,6 +14,13 @@ app = FastAPI(
     title="Resume Screener XAI Auditor API",
     version="1.0.0",
     description="Prediction and SHAP explanations for the validated Resume Screener model.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
