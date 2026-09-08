@@ -6,7 +6,7 @@ This project adds an explainability and validation layer to a resume screening s
 
 - **Streamlit dashboard:** https://resume-screener-validation-maryum.streamlit.app/
 - **FastAPI backend (Railway):** https://resume-screener-validation-production.up.railway.app
-- **Hand-coded HTML/JS client (GitHub Pages):** https://maryumakram16.github.io/Resume-Screener-validation/
+- **Hand-coded HTML/JS client (GitHub Pages):** [https://maryumakram16.github.io/Resume-Screener-validation/](https://maryumakram16.github.io/Resume-Screener-XAI-Auditor/)
 
 ## Architecture
 
