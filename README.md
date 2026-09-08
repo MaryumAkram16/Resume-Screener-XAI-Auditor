@@ -1,4 +1,4 @@
-# SHAP-Based Resume Screening Validation
+# Resume Screener XAI Auditor
 
 This project adds an explainability and validation layer to a resume screening system. It uses SHAP (SHapley Additive exPlanations) to show how different resume–job matching features influence the model’s suitability prediction.
 
