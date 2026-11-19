@@ -36,8 +36,8 @@ Python 3.11 (see `runtime.txt`).
 
 ### 1. Clone and install dependencies
 ```bash
-git clone https://github.com/MaryumAkram16/Resume-Screener-validation.git
-cd Resume-Screener-validation
+git clone https://github.com/MaryumAkram16/Resume-Screener-XAI-Auditor.git
+cd Resume-Screener-XAI-Auditor
 pip install -r requirements.txt
 ```
 
